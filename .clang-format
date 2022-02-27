@@ -42,7 +42,7 @@ SpacesInParentheses: 'false'
 SpacesInSquareBrackets: 'false'
 Standard: Cpp11
 UseTab: Never
-TabWidth: 4
+TabWidth: 2
 SortIncludes: false
 AccessModifierOffset: -2
 
