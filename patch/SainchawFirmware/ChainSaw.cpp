@@ -2,51 +2,70 @@
 #include "sainchaw.h"
 #include <string>
 
-#define SWARM_SIZE 7
-#define SWRM_CTR_SHFT 3
-#define CENT 0.02f
-#define SEMITONE 0.166666667f
-#define BASE_FREQ 32.7f
-#define MAX_DETUNE 0.15f
-#define FM_HZ_PER_VOLT 200.0f
-
 using namespace daisy;
 using namespace daisysp;
 
+const int   kSwarmSize                       = 3;
+const int   kSwarmCenterShift                = 1;
+const float kBaseFrequency                   = 32.7f;
+const float kMaxDetune                       = 0.25f;
+const float kFmHzPerVolt                     = 100.0f;
+const float osc_amplitude                    = 0.2f / kSwarmSize;
+const float kNormalizationDetectionThreshold = -0.15f;
+const int   kNumNormalizedChannels           = 3;
+const int   kProbeSequenceDuration           = 32;
+const int   kNumSwarms                       = 3;
+const int   kNumStereoChannels               = 2;
+
 Sainchaw   sainchaw;
-Oscillator swarm_0[SWARM_SIZE][2];
+Oscillator swarms[kNumSwarms][kSwarmSize][kNumStereoChannels];
 Oscillator test_osc;
 
-float detune;
-bool  alt_encoder_behavior;
-int   semitones;
-int   cents;
-float osc_amplitude;
-float crossfade;
+float    detune_;
+bool     alt_encoder_behavior_;
+int      semitones_;
+int      cents_;
+float    crossfade_;
+float    lpfm_;
+bool     ignore_enc_switch_;
+int      normalization_detection_count_;
+int      normalization_detection_mismatches_[kNumNormalizedChannels];
+uint32_t normalization_probe_state_;
+bool     voct_patched_[kNumNormalizedChannels];
+int      waitcount;
 
 void UpdateControls();
+void DetectNormalization();
 
 static void AudioCallback(AudioHandle::InputBuffer  in,
                           AudioHandle::OutputBuffer out,
                           size_t                    size) {
     UpdateControls();
     for(size_t i = 0; i < size; i++) {
-        for(size_t chn = 0; chn < 2; chn++) {
-            float sig = 0.f;
-            for(int j = 0; j < SWARM_SIZE; j++) {
-                sig += (1.0f - crossfade) * swarm_0[j][0].Process();
-                sig += crossfade * swarm_0[j][1].Process();
+        for(size_t chn = 0; chn < kNumStereoChannels; chn++) {
+            float sig             = 0.f;
+            int   numActiveSwarms = 0;
+            for(size_t swarmn = 0; swarmn < kNumSwarms; swarmn++) {
+                if(voct_patched_[swarmn]) {
+                    ++numActiveSwarms;
+
+                    for(int j = 0; j < kSwarmSize; j++) {
+                        sig += (1.0f - crossfade_)
+                               * swarms[swarmn][j][0].Process();
+                        sig += crossfade_ * swarms[swarmn][j][1].Process();
+                    }
+                }
             }
-            out[chn][i] = sig;
+            out[chn][i] = sig / (float)numActiveSwarms;
         }
     }
 }
 
 void SetupOsc(float samplerate) {
-    for(int i = 0; i < SWARM_SIZE; i++) {
+    for(int i = 0; i < kSwarmSize; i++) {
         for(int j = 0; j < 2; j++) {
-            u_int8_t waveforms[2] = {Oscillator::WAVE_POLYBLEP_SAW,
-                                     Oscillator::WAVE_POLYBLEP_SQUARE};
+            u_int8_t waveforms[2] = {Oscillator::WAVE_POLYBLEP_SQUARE,
+                                     Oscillator::WAVE_POLYBLEP_SAW};
             swarm_0[i][j].Init(samplerate);
             swarm_0[i][j].SetWaveform(waveforms[j]);
             swarm_0[i][j].SetAmp(osc_amplitude);
@@ -56,15 +75,25 @@ void SetupOsc(float samplerate) {
 
 int main(void) {
     float samplerate;
-    sainchaw.Init(); // Initialize hardware (daisy seed, and patch)
+    sainchaw.Init(); // Initialize hardware
     samplerate = sainchaw.AudioSampleRate();
 
-    detune               = 0.f;
-    alt_encoder_behavior = false;
-    semitones            = 0;
-    cents                = 0;
-    osc_amplitude        = .7f / SWARM_SIZE;
-    crossfade            = 0.0f;
+    detune_                        = 0.f;
+    avg                            = 0.f;
+    avghicnt                       = 0;
+    alt_encoder_behavior_          = false;
+    semitones_                     = 0;
+    cents_                         = 0;
+    crossfade_                     = 0.0f;
+    ignore_enc_switch_             = false;
+    normalization_detection_count_ = 0;
+    normalization_probe_state_     = 123456789;
+    waitcount                      = 0;
+
+    for(int i = 0; i < kNumNormalizedChannels; i++) {
+        voct_patched_[i]                       = false;
+        normalization_detection_mismatches_[i] = 0;
+    }
 
     SetupOsc(samplerate);
     sainchaw.SetAltLed(false);
@@ -75,23 +104,69 @@ int main(void) {
 }
 
 void handleEncoder() {
+    sainchaw.SetAltLed(voct_patched_[0]);
+    sainchaw.SetNoteLed(voct_patched_[1]);
+    if(sainchaw.encoder.TimeHeldMs() >= 1000) {
+        cents_             = 0;
+        semitones_         = 0;
+        ignore_enc_switch_ = true;
+        return;
+    }
     if(sainchaw.encoder.FallingEdge()) {
-        alt_encoder_behavior = !alt_encoder_behavior;
-        sainchaw.SetAltLed(alt_encoder_behavior);
-        sainchaw.SetNoteLed(!alt_encoder_behavior);
+        if(ignore_enc_switch_) {
+            ignore_enc_switch_ = false;
+            return;
+        }
+        alt_encoder_behavior_ = !alt_encoder_behavior_;
+        sainchaw.SetAltLed(alt_encoder_behavior_);
+        sainchaw.SetNoteLed(!alt_encoder_behavior_);
     }
-    if(alt_encoder_behavior) {
-        cents += sainchaw.encoder.Increment();
+    if(alt_encoder_behavior_) {
+        cents_ += sainchaw.encoder.Increment();
     } else {
-        semitones += sainchaw.encoder.Increment();
+        semitones_ += sainchaw.encoder.Increment();
     }
+}
+
+void DetectNormalization() {
+    // state of the highest-order bit
+    if(waitcount++ < 5) {
+        return;
+    }
+    waitcount = 0;
+    bool hilo = normalization_probe_state_ >> 31;
+
+    // float expected_adc_value
+    // = hilo ? expected_norm_probe_high : expected_norm_probe_low;
+    for(int i = 0; i < kNumNormalizedChannels; ++i) {
+        float actual_adc_value = sainchaw.GetKnobValue(
+            (Sainchaw::Ctrl)(i + Sainchaw::PITCH_1_CTRL)); // -.2 -.06
+
+        bool read_state = actual_adc_value > kNormalizationDetectionThreshold;
+        if(read_state != hilo) {
+            ++normalization_detection_mismatches_[i];
+        }
+    }
+
+    ++normalization_detection_count_;
+    if(normalization_detection_count_ >= kProbeSequenceDuration) {
+        normalization_detection_count_ = 0;
+        for(int i = 0; i < kNumNormalizedChannels; ++i) {
+            voct_patched_[i] = normalization_detection_mismatches_[i] >= 2;
+            normalization_detection_mismatches_[i] = 0;
+        }
+    }
+
+    normalization_probe_state_
+        = 1103515245 * normalization_probe_state_ + 12345;
+    sainchaw.SetNormalizationProbe(normalization_probe_state_ >> 31);
 }
 
 
 void UpdateControls() {
     sainchaw.ProcessDigitalControls();
     sainchaw.ProcessAnalogControls();
-
+    DetectNormalization();
     // Detune and Shape cv
     float ctrl[Sainchaw::CTRL_LAST];
     for(int i = Sainchaw::DETUNE_CTRL; i < Sainchaw::SHAPE_CTRL + 1; i++) {
@@ -99,22 +174,22 @@ void UpdateControls() {
             = sainchaw.GetKnobValue((Sainchaw::Ctrl)i) + 1.f * .5f; //normalized
     }
 
-    // FM cv
-    float fm_val            = sainchaw.GetKnobValue(Sainchaw::FM_CTRL);
-    ctrl[Sainchaw::FM_CTRL] = fm_val * 8.f; //voltage
+    float fm_val = sainchaw.GetKnobValue(Sainchaw::FM_CTRL) * 8.f; //voltage
+    fonepole(lpfm_, fm_val, .001f);
+    ctrl[Sainchaw::FM_CTRL] = lpfm_;
 
-    // Pitch cv
-    // for(int i = Sainchaw::PITCH_1_CTRL; i < Sainchaw::CTRL_LAST; i++) {
-    // float pitch_val = sainchaw.GetKnobValue((Sainchaw::Ctrl)i);
-    float pitch_val = sainchaw.GetKnobValue(Sainchaw::PITCH_1_CTRL);
-    ctrl[Sainchaw::PITCH_1_CTRL] = pitch_val * 5.f + 2; //voltage
-    // }
+    for(int i = 0; i < 3; i++) {
+        ctrl[Sainchaw::PITCH_1_CTRL + i]
+            = sainchaw.GetKnobValue(Sainchaw::PITCH_1_CTRL + i) * 5.f
+              + 2; //voltage
+    }
 
-    crossfade = DSY_CLAMP(ctrl[Sainchaw::SHAPE_CTRL], 0.f, 1.f);
 
-    detune = DSY_CLAMP(ctrl[Sainchaw::DETUNE_CTRL], 0.f, 1.f);
+    crossfade_ = DSY_CLAMP(ctrl[Sainchaw::SHAPE_CTRL], 0.f, 1.f);
 
-    float fm = powf(2.f, ctrl[Sainchaw::FM_CTRL] * 6.875) * FM_HZ_PER_VOLT;
+    detune_ = DSY_CLAMP(ctrl[Sainchaw::DETUNE_CTRL], 0.f, 1.f);
+
+    float fm = ctrl[Sainchaw::FM_CTRL] * kFmHzPerVolt;
 
     float pitch = powf(2.f, ctrl[Sainchaw::PITCH_1_CTRL]) * 32.7f; //Hz
 
@@ -123,14 +198,16 @@ void UpdateControls() {
     handleEncoder();
 
     //Adjust oscillators based on inputs
-    for(int i = 0; i < SWARM_SIZE; i++) {
-        // TODO: don't need to do all this stuff 7 times
-        float shift = (i - SWRM_CTR_SHFT) * detune * MAX_DETUNE;
-        shift += semitones + (cents * 0.12f);
-        float shifted_pitch = powf(2.0f, shift * kOneTwelfth) * pitch;
-        shifted_pitch       = DSY_CLAMP(shifted_pitch, 8.175f, 16742.4f);
-
-        swarm_0[i][0].SetFreq(shifted_pitch); // + fm);
-        swarm_0[i][1].SetFreq(shifted_pitch); // + fm);
+    for(int i = 0; i < kSwarmSize; i++) {
+        for(int swarmn = 0; swarmn < kNumSwarms; s++) {
+            if(voct_patched_[swarmn]) {
+                float shift = (i - kSwarmCenterShift) * detune_ * kMaxDetune;
+                shift += semitones_ + (cents_ * 0.12f);
+                float shifted_pitch = powf(2.0f, shift * kOneTwelfth) * pitch;
+                shifted_pitch = DSY_CLAMP(shifted_pitch, 8.175f, 16742.4f);
+                swarms[swarmn][i][0].SetFreq(shifted_pitch + fm);
+                swarms[swarmn][i][1].SetFreq(shifted_pitch + fm);
+            }
+        }
     }
 }
