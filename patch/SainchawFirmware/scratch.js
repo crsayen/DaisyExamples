@@ -26,6 +26,7 @@ function process(f) {
   let t
   let phaseinc = phase_inc(f)
 
+  // case WAVE_POLYBLEP_SAW
   // t = phase_ * TWO_PI_RECIP
   // // console.log(t)
   // if (phaseinc >= 0) {
@@ -40,7 +41,7 @@ function process(f) {
 
   // case WAVE_POLYBLEP_SQUARE:
   t = phase_ * TWO_PI_RECIP
-  if (phaseinc > 0) {
+  if (phase > 0) {
     out = phase_ < PI_F ? 1.0 : -1.0
     out += polyblep(phaseinc, t)
     out -= polyblep(phaseinc, (t + 0.5) % 1.0)
