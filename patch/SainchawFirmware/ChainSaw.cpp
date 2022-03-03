@@ -229,7 +229,7 @@ void UpdateControls() {
       // swarms[s][i].SetFreq(shifted_pitch); // + fm);
       swarms[s][i].SetSyncFreq(shifted_pitch);
       swarms[s][i].SetFreq(shifted_pitch);
-      swarms[s][i].SetPW((shape_amt)*0.5f);
+      swarms[s][i].SetPW(DSY_MIN(shape_amt, 0.5f));
       swarms[s][i].SetWaveshape(shape_amt);
     }
   }
