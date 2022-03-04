@@ -6,17 +6,17 @@
 using namespace daisy;
 using namespace daisysp;
 
-const int   kSwarmSize                       = 7;
-const int   kSwarmCenterShift                = 3;
+const int   kSwarmSize                       = 5;
+const int   kSwarmCenterShift                = 2;
 const float kBaseFrequency                   = 32.7f;
-const float kDetuneScale                     = 0.175f;
+const float kDetuneScale                     = 0.25f;
 const float kFmHzPerVolt                     = 100.0f;
-const float osc_amplitude                    = 0.2f / kSwarmSize;
 const float kNormalizationDetectionThreshold = -0.15f;
 const int   kNumNormalizedChannels           = 3;
 const int   kProbeSequenceDuration           = 32;
 const int   kNumSwarms                       = 3;
 const int   kNumStereoChannels               = 2;
+const float kAmplitudeReduction              = .12f / kSwarmSize;
 
 Sainchaw                sainchaw;
 VariableShapeOscillator swarms[kNumSwarms][kSwarmSize];
@@ -93,7 +93,7 @@ AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, size_t
         for(int j = 0; j < kSwarmSize; j++) { sig += swarms[swarmn][j].Process(); }
       }
     }
-    sig *= 0.005;
+    sig *= .3f * kAmplitudeReduction;
 
     out[0][i] = sig;
     out[1][i] = sig;
@@ -202,7 +202,8 @@ void UpdateControls() {
       ((sainchaw.GetKnobValue(Sainchaw::SHAPE_CTRL) + 1) * .5), .0f, 1.f); // 0.0 to 1.0
 
   float detune_amt
-      = DSY_CLAMP(((sainchaw.GetKnobValue(Sainchaw::DETUNE_CTRL) + 1.f) * .5), .0f, 1.f)
+      = DSY_CLAMP(
+            ((sainchaw.GetKnobValue(Sainchaw::DETUNE_CTRL) + 1.f) * .5) - .05f, .0f, 1.f)
         * kDetuneScale;
 
   // float fm_val = sainchaw.GetKnobValue(Sainchaw::FM_CTRL) * 8.f; //voltage
@@ -229,7 +230,7 @@ void UpdateControls() {
       // swarms[s][i].SetFreq(shifted_pitch); // + fm);
       swarms[s][i].SetSyncFreq(shifted_pitch);
       swarms[s][i].SetFreq(shifted_pitch);
-      swarms[s][i].SetPW(DSY_MIN(shape_amt, 0.5f));
+      swarms[s][i].SetPW(DSY_MIN(shape_amt, .5f));
       swarms[s][i].SetWaveshape(shape_amt);
     }
   }
