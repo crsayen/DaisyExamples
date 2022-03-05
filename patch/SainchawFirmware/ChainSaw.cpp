@@ -6,8 +6,7 @@
 using namespace daisy;
 using namespace daisysp;
 
-const int   kSwarmSize                       = 5;
-const int   kSwarmCenterShift                = 2;
+const int   kMaxSwarmSize                    = 9;
 const float kBaseFrequency                   = 32.7f;
 const float kDetuneScale                     = 0.25f;
 const float kFmHzPerVolt                     = 100.0f;
@@ -16,10 +15,11 @@ const int   kNumNormalizedChannels           = 3;
 const int   kProbeSequenceDuration           = 32;
 const int   kNumSwarms                       = 3;
 const int   kNumStereoChannels               = 2;
-const float kAmplitudeReduction              = .12f / kSwarmSize;
+
+enum EncState { SEMITONES, CENTS, SWARM_SIZE, LAST };
 
 Sainchaw                sainchaw;
-VariableShapeOscillator swarms[kNumSwarms][kSwarmSize];
+VariableShapeOscillator swarms[kNumSwarms][kMaxSwarmSize];
 
 // #define LOAD_METER
 
@@ -27,8 +27,10 @@ VariableShapeOscillator swarms[kNumSwarms][kSwarmSize];
 CpuLoadMeter cpuLoadMeter;
 #endif
 
-
-bool     alt_encoder_behavior_;
+int      encoderState_;
+int      swarmSize_;
+float    amplitudeReduction_;
+int      swarmCenterShift_;
 int      semitones_;
 int      cents_;
 float    lpfm_;
@@ -72,13 +74,6 @@ void displayLoadMeter() {
 #endif LOAD_METER
 }
 
-void displayEncoderState() {
-#ifndef LOAD_METER
-  sainchaw.SetAltLed(alt_encoder_behavior_);
-  sainchaw.SetNoteLed(!alt_encoder_behavior_);
-#endif
-}
-
 static void
 AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, size_t size) {
   UpdateControls();
@@ -90,10 +85,10 @@ AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, size_t
       if(voct_patched_[swarmn]) {
         ++numActiveSwarms;
 
-        for(int j = 0; j < kSwarmSize; j++) { sig += swarms[swarmn][j].Process(); }
+        for(int j = 0; j < swarmSize_; j++) { sig += swarms[swarmn][j].Process(); }
       }
     }
-    sig *= .3f * kAmplitudeReduction;
+    sig *= .3f * amplitudeReduction_;
 
     out[0][i] = sig;
     out[1][i] = sig;
@@ -101,7 +96,7 @@ AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, size_t
 }
 
 void SetupOsc(float samplerate) {
-  for(int i = 0; i < kSwarmSize; i++) {
+  for(int i = 0; i < kMaxSwarmSize; i++) {
     for(int s = 0; s < kNumSwarms; s++) {
       swarms[s][i].Init(samplerate);
       swarms[s][i].SetSync(true);
@@ -112,8 +107,12 @@ void SetupOsc(float samplerate) {
 int main(void) {
   float samplerate;
   sainchaw.Init(); // Initialize hardware
-  samplerate                     = sainchaw.AudioSampleRate();
-  alt_encoder_behavior_          = false;
+  samplerate = sainchaw.AudioSampleRate();
+
+  encoderState_                  = EncState::SEMITONES;
+  swarmSize_                     = 5;
+  swarmCenterShift_              = 2;
+  amplitudeReduction_            = .12f / swarmSize_;
   semitones_                     = 0;
   cents_                         = 0;
   ignore_enc_switch_             = false;
@@ -150,15 +149,25 @@ void handleEncoder() {
       ignore_enc_switch_ = false;
       return;
     }
-    alt_encoder_behavior_ = !alt_encoder_behavior_;
 
-    displayEncoderState();
+    encoderState_++;
+    if(encoderState_ == EncState::LAST) { encoderState_ = 0; }
   }
-  if(alt_encoder_behavior_) {
-    cents_ += sainchaw.encoder.Increment();
-  } else {
-    semitones_ += sainchaw.encoder.Increment();
+
+  switch(encoderState_) {
+    case EncState::SEMITONES: semitones_ += sainchaw.encoder.Increment(); break;
+    case EncState::CENTS: semitones_ += sainchaw.encoder.Increment(); break;
+    case EncState::SWARM_SIZE:
+      swarmSize_
+          = DSY_CLAMP(swarmSize_ + sainchaw.encoder.Increment() * 2, 1, kMaxSwarmSize);
+      swarmCenterShift_ = floor(swarmCenterShift_ * .5f);
+      break;
   }
+
+  sainchaw.SetNoteLed(encoderState_ == EncState::SEMITONES
+                      || encoderState_ == EncState::SWARM_SIZE);
+  sainchaw.SetAltLed(encoderState_ == EncState::CENTS
+                     || encoderState_ == EncState::SWARM_SIZE);
 }
 
 void DetectNormalization() {
@@ -224,8 +233,8 @@ void UpdateControls() {
 
     float pitch = powf(2.f, voltage) * 32.7f; // Hz
 
-    for(int i = 0; i < kSwarmSize; i++) {
-      float shift = (i - kSwarmCenterShift) * detune_amt + semitones_ + cents_ * 0.12f;
+    for(int i = 0; i < swarmSize_; i++) {
+      float shift = (i - swarmCenterShift_) * detune_amt + semitones_ + cents_ * 0.12f;
       float shifted_pitch = powf(2.0f, shift * kOneTwelfth) * pitch;
       // swarms[s][i].SetFreq(shifted_pitch); // + fm);
       swarms[s][i].SetSyncFreq(shifted_pitch);
