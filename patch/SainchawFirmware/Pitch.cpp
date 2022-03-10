@@ -38,12 +38,13 @@ float Pitch::TransposeBySemitones(float semitones) {
 }
 
 float Pitch::TransposeByCents(float cents) {
-  this->hz *= powf(2.f, cents * 0.12 * kOneTwelfth);
+  this->hz *= powf(2.f, cents * 0.01f * kOneTwelfth);
   return this->hz;
 }
 
-float Pitch::Transpose(float semitones, float cents = 0.f) {
-  this->hz *= powf(2.f, semitones + (cents * 0.12) * kOneTwelfth) + hz;
+float Pitch::Transpose(float semitones, float cents) {
+  this->TransposeBySemitones(semitones);
+  this->TransposeByCents(cents);
   return this->hz;
 }
 
