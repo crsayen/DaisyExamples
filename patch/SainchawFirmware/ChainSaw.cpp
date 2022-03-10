@@ -30,6 +30,7 @@ CpuLoadMeter cpuLoadMeter;
 #endif
 
 CONFIGURATION current_config;
+bool          docal;
 int           encoderState_;
 int           swarmSize_;
 float         amplitudeReduction_;
@@ -48,6 +49,12 @@ Pitch         pitch[kNumSwarms];
 
 void UpdateControls();
 void DetectNormalization();
+void handleCalibration();
+bool cal_handleEncoder();
+void cal_read_voct();
+void save_config(uint32_t slot);
+void load_config(uint32_t slot);
+
 
 void blockStart() {
 #ifdef LOAD_METER
@@ -112,8 +119,10 @@ int main(void) {
   float samplerate;
   sainchaw.Init(); // Initialize hardware
   samplerate = sainchaw.AudioSampleRate();
+  load_config(0);
 
   encoderState_                  = EncState::SEMITONES;
+  docal                          = false;
   swarmSize_                     = 5;
   swarmCenterShift_              = 2;
   amplitudeReduction_            = .12f / swarmSize_;
@@ -144,18 +153,13 @@ int main(void) {
 
 void handleEncoder() {
   if(sainchaw.encoder.TimeHeldMs() >= 5000) {
+    sainchaw.SetNoteLed(true);
+    sainchaw.SetAltLed(true);
     if(sainchaw.encoder.Increment()) {
-      sainchaw.SetNoteLed(false);
-      sainchaw.SetAltLed(false);
-      sainchaw.DelayMs(1000);
-      sainchaw.SetNoteLed(true);
-      sainchaw.SetAltLed(true);
-      sainchaw.DelayMs(1000);
-      sainchaw.SetNoteLed(false);
-      sainchaw.SetAltLed(false);
-      handleCalibration();
+      docal = true;
       return;
     }
+    return;
   }
   if(sainchaw.encoder.TimeHeldMs() >= 1000) {
     cents_             = 0;
@@ -164,6 +168,10 @@ void handleEncoder() {
     return;
   }
   if(sainchaw.encoder.FallingEdge()) {
+    if(docal) {
+      docal = false;
+      handleCalibration();
+    }
     if(ignore_enc_switch_) {
       ignore_enc_switch_ = false;
       return;
@@ -322,6 +330,7 @@ void handleCalibration() {
   save_config(0);
   sainchaw.StartAudio(AudioCallback);
 }
+
 
 void save_config(uint32_t slot) {
   uint32_t base = 0x90000000;

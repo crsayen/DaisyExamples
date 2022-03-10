@@ -1,6 +1,5 @@
 #include "Pitch.h"
 #include "daisysp.h"
-#include "dsp.h"
 
 using namespace daisysp;
 
