@@ -127,4 +127,7 @@ bin/
 .visualgdb
 VisualGDBCache
 vs/*.log
+MyProjects/
+.cortex-debug.registers.state.json
+.cortex-debug.peripherals.state.json
 

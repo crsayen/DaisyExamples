@@ -68,7 +68,7 @@
       "command": "make",
       "label": "build_libdaisy",
       "options": {
-        "cwd": "${workspaceFolder}/../../libDaisy/"
+        "cwd": "${workspaceFolder}/../../libDaisy"
       },
       "problemMatcher": ["$gcc"],
       "type": "shell"
@@ -77,7 +77,7 @@
       "command": "make",
       "label": "build_daisysp",
       "options": {
-        "cwd": "${workspaceFolder}/../../DaisySP/"
+        "cwd": "${workspaceFolder}/../../DaisySP"
       },
       "problemMatcher": ["$gcc"],
       "type": "shell"
