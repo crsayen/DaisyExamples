@@ -7,18 +7,6 @@ using namespace daisy;
 #define PIN_ENC_CLICK 0
 #define PIN_ENC_B 11
 #define PIN_ENC_A 12
-#define PIN_OLED_DC 9
-#define PIN_OLED_RESET 30
-#define PIN_MIDI_OUT 13
-#define PIN_MIDI_IN 14
-#define PIN_GATE_OUT 17
-#define PIN_GATE_IN_1 20
-#define PIN_GATE_IN_2 19
-#define PIN_SAI_SCK_A 28
-#define PIN_SAI2_FS_A 27
-#define PIN_SAI2_SD_A 26
-#define PIN_SAI2_SD_B 25
-#define PIN_SAI2_MCLK 24
 #define NOTE_LED_PIN 4 // this is the Daisy pin (not MCU pin)
 #define PITCH_LED_PIN 3 // this is the Daisy pin (not MCU pin)
 #define NORMALIZATION_PROBE_PIN 21 // this is the Daisy pin (not MCU pin)
