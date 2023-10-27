@@ -19,16 +19,18 @@ using namespace daisy;
 #define PIN_SAI2_SD_A 26
 #define PIN_SAI2_SD_B 25
 #define PIN_SAI2_MCLK 24
-#define NOTE_LED_PIN 5 // this is the Daisy pin (not MCU pin)
-#define PITCH_LED_PIN 4 // this is the Daisy pin (not MCU pin)
-#define NORMALIZATION_PROBE_PIN 28 // this is the Daisy pin (not MCU pin)
+#define NOTE_LED_PIN 4 // this is the Daisy pin (not MCU pin)
+#define PITCH_LED_PIN 3 // this is the Daisy pin (not MCU pin)
+#define NORMALIZATION_PROBE_PIN 21 // this is the Daisy pin (not MCU pin)
 
 #define PIN_AK4556_RESET 29
 
-#define PIN_CTRL_1 15
-#define PIN_CTRL_2 16
-#define PIN_CTRL_3 21
-#define PIN_CTRL_4 18
+#define PIN_DETUNE_CTRL 15
+#define PIN_SHAPE_CTRL 16
+#define PIN_FM_CTRL 17
+#define PIN_PITCH_1_CTRL 18
+#define PIN_PITCH_2_CTRL 19
+#define PIN_PITCH_3_CTRL 21
 
 void Sainchaw::Init(bool boost)
 {
@@ -36,17 +38,8 @@ void Sainchaw::Init(bool boost)
     seed.Configure();
     seed.Init(boost);
     InitAudio();
-    InitCvOutputs();
     InitEncoder();
-    InitGates();
     InitControls();
-
-    // DETUNE_CTRL = 22;
-    // SHAPE_CTRL = 23;
-    // FM_CTRL = 24;
-    // PITCH_1_CTRL = 25;
-    // PITCH_2_CTRL = 26;
-    // PITCH_3_CTRL = 27;
 
     // LEDs
     note_led.pin   = seed.GetPin(NOTE_LED_PIN);
@@ -152,42 +145,6 @@ void Sainchaw::ProcessDigitalControls()
     encoder.Debounce();
 }
 
-// This will render the display with the controls as vertical bars
-void Sainchaw::DisplayControls(bool invert)
-{
-    bool on, off;
-    on  = invert ? false : true;
-    off = invert ? true : false;
-    if(seed.system.GetNow() - screen_update_last_ > screen_update_period_)
-    {
-        // Graph Knobs
-        size_t barwidth, barspacing;
-        size_t curx, cury;
-        screen_update_last_ = seed.system.GetNow();
-        barwidth            = 15;
-        barspacing          = 20;
-        display.Fill(off);
-        // Bars for all four knobs.
-        for(size_t i = 0; i < Sainchaw::CTRL_LAST; i++)
-        {
-            float  v;
-            size_t dest;
-            curx = (barspacing * i + 1) + (barwidth * i);
-            cury = display.Height();
-            v    = GetKnobValue(static_cast<Sainchaw::Ctrl>(i));
-            dest = (v * display.Height());
-            for(size_t j = dest; j > 0; j--)
-            {
-                for(size_t k = 0; k < barwidth; k++)
-                {
-                    display.DrawPixel(curx + k, cury - j, on);
-                }
-            }
-        }
-        display.Update();
-    }
-}
-
 // Private Function Implementations
 // set SAI2 stuff -- run this between seed configure and init
 void Sainchaw::InitAudio()
@@ -254,10 +211,12 @@ void Sainchaw::InitControls()
     AdcChannelConfig cfg[CTRL_LAST];
 
     // Init ADC channels with Pins
-    cfg[CTRL_1].InitSingle(seed.GetPin(PIN_CTRL_1));
-    cfg[CTRL_2].InitSingle(seed.GetPin(PIN_CTRL_2));
-    cfg[CTRL_3].InitSingle(seed.GetPin(PIN_CTRL_3));
-    cfg[CTRL_4].InitSingle(seed.GetPin(PIN_CTRL_4));
+    cfg[DETUNE_CTRL].InitSingle(seed.GetPin(PIN_DETUNE_CTRL));
+    cfg[SHAPE_CTRL].InitSingle(seed.GetPin(PIN_SHAPE_CTRL));
+    cfg[FM_CTRL].InitSingle(seed.GetPin(PIN_FM_CTRL));
+    cfg[PITCH_1_CTRL].InitSingle(seed.GetPin(PIN_PITCH_1_CTRL));
+    cfg[PITCH_2_CTRL].InitSingle(seed.GetPin(PIN_PITCH_2_CTRL));
+    cfg[PITCH_3_CTRL].InitSingle(seed.GetPin(PIN_PITCH_3_CTRL));
 
     // Initialize ADC
     seed.adc.Init(cfg, CTRL_LAST);
@@ -267,20 +226,6 @@ void Sainchaw::InitControls()
     {
         controls[i].Init(seed.adc.GetPtr(i), AudioCallbackRate(), true);
     }
-}
-
-void Sainchaw::InitCvOutputs()
-{
-    //    dsy_dac_init(&seed.dac_handle, DSY_DAC_CHN_BOTH);
-    //    dsy_dac_write(DSY_DAC_CHN1, 0);
-    //    dsy_dac_write(DSY_DAC_CHN2, 0);
-    DacHandle::Config cfg;
-    cfg.bitdepth   = DacHandle::BitDepth::BITS_12;
-    cfg.buff_state = DacHandle::BufferState::ENABLED;
-    cfg.mode       = DacHandle::Mode::POLLING;
-    cfg.chn        = DacHandle::Channel::BOTH;
-    seed.dac.Init(cfg);
-    seed.dac.WriteValue(DacHandle::Channel::BOTH, 0);
 }
 
 void Sainchaw::InitEncoder()
@@ -298,20 +243,4 @@ void Sainchaw::SetNoteLed(bool state)
 void Sainchaw::SetAltLed(bool state) 
 {
      dsy_gpio_write(&note_led, state);
-}
-
-void Sainchaw::InitGates()
-{
-    // Gate Output
-    gate_output.pin  = seed.GetPin(PIN_GATE_OUT);
-    gate_output.mode = DSY_GPIO_MODE_OUTPUT_PP;
-    gate_output.pull = DSY_GPIO_NOPULL;
-    dsy_gpio_init(&gate_output);
-
-    // Gate Inputs
-    dsy_gpio_pin pin;
-    pin = seed.GetPin(PIN_GATE_IN_1);
-    gate_input[GATE_IN_1].Init(&pin);
-    pin = seed.GetPin(PIN_GATE_IN_2);
-    gate_input[GATE_IN_2].Init(&pin);
 }

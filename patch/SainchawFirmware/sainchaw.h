@@ -29,14 +29,6 @@ class Sainchaw
         CTRL_LAST, /**< */
     };
 
-    /** Daisy patch gate inputs */
-    enum GateInput
-    {
-        GATE_IN_1,    /**< */
-        GATE_IN_2,    /** <*/
-        GATE_IN_LAST, /**< */
-    };
-
     /** Constructor */
     Sainchaw() {}
     /** Destructor */
@@ -110,14 +102,12 @@ class Sainchaw
     void SetNoteLed(bool state);
 
     void SetAltLed(bool state);
-    
+
     void SetNormalizationProbe(bool state);
 
     /**  Process the digital controls */
     void ProcessDigitalControls();
 
-    /**  Control the display */
-    void DisplayControls(bool invert = true);
 
     /* These are exposed for the user to access and manipulate directly
        Helper functions above provide easier access to much of what they are capable of.
@@ -125,10 +115,7 @@ class Sainchaw
     DaisySeed       seed;                             /**< Seed object */
     Encoder         encoder;                          /**< Encoder object */
     AnalogControl   controls[CTRL_LAST];              /**< Array of controls*/
-    GateIn          gate_input[GATE_IN_LAST];         /**< Gate inputs  */
-    MidiUartHandler midi;                             /**< Handles midi*/
-    OledDisplay<SSD130x4WireSpi128x64Driver> display; /**< & */
-    dsy_gpio        note_led, alt_led;
+    dsy_gpio        note_led, alt_led, normalization_probe;
 
     // TODO: Add class for Gate output
     dsy_gpio gate_output; /**< &  */
@@ -138,11 +125,7 @@ class Sainchaw
     void SetHidUpdateRates();
     void InitAudio();
     void InitControls();
-    void InitDisplay();
-    void InitMidi();
-    void InitCvOutputs();
     void InitEncoder();
-    void InitGates();
 
     uint32_t screen_update_last_, screen_update_period_;
 };
