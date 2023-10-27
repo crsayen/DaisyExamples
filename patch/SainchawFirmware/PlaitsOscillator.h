@@ -30,6 +30,7 @@
 #ifndef PLAITS_DSP_OSCILLATOR_OSCILLATOR_H_
 #define PLAITS_DSP_OSCILLATOR_OSCILLATOR_H_
 
+// #include "DaisySP/utility/dsp/dsp.h"
 #include "stmlib/dsp/dsp.h"
 #include "stmlib/dsp/parameter_interpolator.h"
 #include "stmlib/dsp/polyblep.h"
