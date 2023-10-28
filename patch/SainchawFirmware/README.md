@@ -1,23 +1,11 @@
-# PolyOsc
+# Sainchaw
 
 ## Author
 
-Ben Sergentanis
+Chris Sayen
 
 ## Description
 
-Three oscillators in one package! Make evolving chords, and shift them around!
+Inspired by the [Chainsaw by Acid Rain Technology](https://acidraintechnology.com/products/chainsaw?variant=29475391996022), Sainchaw has three CV controlled voices, each comprised of up to seven morpable, detunable waves.
 
-[Source Code](https://github.com/electro-smith/DaisyExamples/tree/master/patch/PolyOsc)
-
-## Controls
-| Control | Description | Comment |
-| --- | --- | --- |
-| Ctrl 1 - 3 | Oscillator Frequency | Controls the individual oscillators |
-| Ctrl 4 | Global Frequency | Recommended to set this at 50% at first. |
-| Encoder | Waveform | Global control. Cycle through Sine, Triangle, Saw, Ramp, and Square |
-| Audio Out 1 - 3 | Oscillator Input | Outputs for individual oscillators |
-| Audio Out 4 | Mix output | Listen to all 3 oscillators | 
-
-## Diagram
-<img src="https://raw.githubusercontent.com/electro-smith/DaisyExamples/master/patch/PolyOsc/resources/PolyOsc.png" alt="PolyOsc.png" style="width: 100%;"/>
+[Source Code](https://github.com/crsayen/DaisyExamples/tree/master/patch/SainchawFirmware)

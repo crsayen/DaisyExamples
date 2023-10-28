@@ -41,7 +41,7 @@
                 "USE_FULL_LL_DRIVER"
             ],
             "windowsSdkVersion": "",
-            "compilerPath": "/usr/local/bin/arm-none-eabi-g++",
+            "compilerPath": "/opt/homebrew/bin/arm-none-eabi-g++",
             "cStandard": "gnu11",
             "cppStandard": "gnu++14",
             "intelliSenseMode": "gcc-arm",

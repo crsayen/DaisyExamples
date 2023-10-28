@@ -21,7 +21,7 @@ float Pitch::SetByVoltage(float voltage) {
   return this->hz;
 }
 
-float Pitch::SetByNote(u_int8_t note) {
+float Pitch::SetByNote(uint8_t note) {
   size_t baseNote = note % 12;
   int    octave   = note < 12 ? 1 : (note / (int)note) + 1;
   this->hz        = (float)Pitch::note[baseNote] * (float)octave;

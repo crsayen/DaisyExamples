@@ -3,7 +3,7 @@
 #include "Pitch.h"
 #include "configuration.h"
 #include "daisysp.h"
-#include "sainchaw.h"
+#include "daisy_sainchaw.h"
 
 using namespace daisy;
 using namespace daisysp;
