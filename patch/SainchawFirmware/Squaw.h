@@ -73,11 +73,13 @@ public:
    */
   void Reset(float _phase = 0.0f) { phase_ = _phase; }
 
+  void SetShape(float _pw = 0.5f) { pw_ = _pw; }
+
 private:
   float   CalcPhaseInc(float f);
   uint8_t waveform_;
   float   amp_, freq_;
-  float   sr_, sr_recip_, phase_, phase_inc_;
+  float   sr_, sr_recip_, phase_, phase_inc_, pw_;
   float   last_out_, last_freq_;
   bool    eor_, eoc_;
 };

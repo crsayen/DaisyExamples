@@ -18,7 +18,8 @@ const int   kNumStereoChannels              = 2;
 enum EncState { SEMITONES, CENTS, SWARM_SIZE, LAST };
 
 Sainchaw                sainchaw;
-VariableShapeOscillator swarms[kNumVoices][kMaxOscsPerVoice];
+OscillatorBank swarms[kNumVoices][kMaxOscsPerVoice];
+
 
 
 int           encoderState_;
@@ -58,7 +59,11 @@ void SetupOsc(float samplerate) {
   for(int i = 0; i < kMaxOscsPerVoice; i++) {
     for(int s = 0; s < kNumVoices; s++) {
       swarms[s][i].Init(samplerate);
-      swarms[s][i].SetSync(true);
+      swarms[s][i].SetGain(1.f);
+      for (int a = 0; a < 7; a++) {
+        swarms[s][i].SetSingleAmp(1.f, a);
+      }
+      // swarms[s][i].SetSync(true);
     }
   }
 }
@@ -180,10 +185,10 @@ void UpdateControls() {
       pitch[voice_n].Transpose((0 - floor(swarmSize_ / 2.f)) * detune_amt, 0);
       // pitch[i].Transpose(1, cents_);
       // swarms[s][i].SetFreq(shifted_pitch); // + fm);
-      swarms[voice_n][osc].SetSyncFreq(pitch[voice_n].hz);
+      // swarms[voice_n][osc].SetSyncFreq(pitch[voice_n].hz);
       swarms[voice_n][osc].SetFreq(pitch[voice_n].hz);
-      swarms[voice_n][osc].SetPW(DSY_MIN(shape_amt, .5f));
-      swarms[voice_n][osc].SetWaveshape(shape_amt);
+      // swarms[voice_n][osc].SetPW(DSY_MIN(shape_amt, .5f));
+      // swarms[voice_n][osc].SetWaveshape(shape_amt);
     }
   }
 }

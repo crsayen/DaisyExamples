@@ -3,7 +3,8 @@ TARGET = ChainSaw
 
 # Sources
 CPP_SOURCES += ChainSaw.cpp \
-Pitch.cpp
+Pitch.cpp \
+Squaw.cpp
 
 # Library Locations
 LIBDAISY_DIR = ../../libdaisy
