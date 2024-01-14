@@ -28,7 +28,8 @@
                 "${workspaceFolder}/patch/Nimbus/dsp/fx",
                 "${workspaceFolder}/field/Nimbus",
                 "${workspaceFolder}/field/Nimbus/dsp",
-                "${workspaceFolder}/field/Nimbus/dsp/pvoc"
+                "${workspaceFolder}/field/Nimbus/dsp/pvoc",
+                "${workspaceFolder}/DaisySP/tests/util/daisy_pc"
             ],
             "defines": [
                 "CORE_CM7",
@@ -41,7 +42,7 @@
                 "USE_FULL_LL_DRIVER"
             ],
             "windowsSdkVersion": "",
-            "compilerPath": "/opt/homebrew/bin/arm-none-eabi-g++",
+            "compilerPath": "C:/Program Files/DaisyToolchain/bin/g++.exe",
             "cStandard": "gnu11",
             "cppStandard": "gnu++14",
             "intelliSenseMode": "gcc-arm",
