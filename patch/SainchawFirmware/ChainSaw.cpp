@@ -12,7 +12,7 @@ const int   kMaxSwarmSize          = 9;
 const float kBaseFrequency         = 32.7f;
 const float kDetuneScale           = 0.25f;
 const float kFmHzPerVolt           = 100.0f;
-const int   kNumSwarms             = 3;
+const int   kNumSwarms             = 1;
 const int   kProbeSequenceDuration = 32;
 const int   kNumStereoChannels     = 2;
 const int   kConfigSlot            = 0;
@@ -85,7 +85,7 @@ int main(void) {
   swarmSize_          = 5;
   swarmCenterShift_   = 2;
   amplitudeReduction_ = .12f / swarmSize_;
-  semitones_          = 0;
+  semitones_          = -12;
   cents_              = 0;
   ignore_enc_switch_  = false;
   waitcount_          = 0;
@@ -157,11 +157,10 @@ void UpdateControls() {
 
 
   float shape_amt = DSY_CLAMP(
-      ((sainchaw.GetKnobValue(Sainchaw::SHAPE_CTRL) + 1) * .5), .0f, 1.f); // 0.0 to 1.0
+      ((sainchaw.GetKnobValue(Sainchaw::SHAPE_CTRL))), .0f, 1.f); // 0.0 to 1.0
 
   float detune_amt
-      = DSY_CLAMP(
-            ((sainchaw.GetKnobValue(Sainchaw::DETUNE_CTRL) + 1.f) * .5) - .05f, .0f, 1.f)
+      = DSY_CLAMP(((sainchaw.GetKnobValue(Sainchaw::DETUNE_CTRL))) - .05f, .0f, 1.f)
         * kDetuneScale;
 
   // float fm_val = sainchaw.GetKnobValue(Sainchaw::FM_CTRL) * 8.f; //voltage
