@@ -1,14 +1,14 @@
 #include "Squaw.h"
 // #include "dsp.h"
 
-const float ONE_THIRD = 1 / 3;
-const float TWO_THIRDS = 2 * ONE_THIRD;
+const float ONE_THIRD = 1.0f / 3.0f;
+const float TWO_THIRDS = 2.0f * ONE_THIRD;
 
 static inline float Polyblep(float phase_inc, float t);
 
 
 float Squaw::Process() {
-  float square, saw, out, tri, last_tri, fade_in;
+  float square, saw, tri, fade_in;
 
   saw = (2.0f * phase_) - 1.0f;
   square = phase_ < pw_ ? 1.0f : -1.0;
@@ -23,8 +23,8 @@ float Squaw::Process() {
 
   saw *= -1.0f;
   square *= -0.707f;
-  tri  = phase_inc_ * tri + (1.0f - phase_inc_) * last_tri;
-  last_tri = tri;
+  tri  = phase_inc_ * tri + (1.0f - phase_inc_) * last_tri_;
+  last_tri_ = tri;
   tri *= -4.0f;
 
   fade_in = fmodf(pw_, ONE_THIRD) * 3.0f;
@@ -44,6 +44,8 @@ float Squaw::Process() {
   if (phase_ > 1.0f) {
       phase_ -= 1.0f;
   }
+
+  return (saw + tri + square) * ONE_THIRD;
 }
 
 float Squaw::CalcPhaseInc(float f) { return f * sr_recip_; }

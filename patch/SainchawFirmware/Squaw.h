@@ -21,12 +21,10 @@ public:
   void Init(float sample_rate) {
     sr_        = sample_rate;
     sr_recip_  = 1.0f / sample_rate;
-    freq_      = 100.0f;
-    amp_       = 0.5f;
+    freq_      = 50.0f;
     phase_     = 0.0f;
     phase_inc_ = CalcPhaseInc(freq_);
-    eoc_       = true;
-    eor_       = true;
+    last_tri_ = 0.0f;
   }
 
 
@@ -37,41 +35,10 @@ public:
     phase_inc_ = CalcPhaseInc(f);
   }
 
-
-  /** Sets the amplitude of the waveform.
-   */
-  inline void SetAmp(const float a) { amp_ = a; }
-
-  /** Returns true if cycle is at end of rise. Set during call to Process.
-   */
-  inline bool IsEOR() { return eor_; }
-
-  /** Returns true if cycle is at end of cycle. Set during call to Process.
-   */
-  inline bool IsEOC() { return eoc_; }
-
-  /** Returns true if cycle rising.
-   */
-  inline bool IsRising() { return phase_ < PI_F; }
-
-  /** Returns true if cycle falling.
-   */
-  inline bool IsFalling() { return phase_ >= PI_F; }
-
   /** Processes the waveform to be generated, returning one sample. This should be called
    * once per sample period.
    */
   float Process();
-
-
-  /** Adds a value 0.0-1.0 (mapped to 0.0-TWO_PI) to the current phase. Useful for PM and
-   * "FM" synthesis.
-   */
-  void PhaseAdd(float _phase) { phase_ += (_phase * TWOPI_F); }
-  /** Resets the phase to the input argument. If no argumeNt is present, it will reset
-   * phase to 0.0;
-   */
-  void Reset(float _phase = 0.0f) { phase_ = _phase; }
 
   void SetShape(float _pw = 0.5f) { pw_ = _pw; }
 
@@ -79,7 +46,5 @@ private:
   float   CalcPhaseInc(float f);
   uint8_t waveform_;
   float   amp_, freq_;
-  float   sr_, sr_recip_, phase_, phase_inc_, pw_;
-  float   last_out_, last_freq_;
-  bool    eor_, eoc_;
+  float   sr_, sr_recip_, phase_, phase_inc_, pw_, last_tri_;
 };
