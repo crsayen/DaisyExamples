@@ -1,12 +1,11 @@
 import math
 import matplotlib.pyplot as plt
-TWO_PI_RECIP = 0.15915494
-PI_F = 3.1415927410125732421875
-TWOPI_F = 2.0 * PI_F
-SQUARE_FUDGE = 0.83333
+one_third = 1 / 3
+two_thirds = 2 * one_third
+last_tri = 0;
 
 def polyblep(phase_inc, t):
-  dt = phase_inc * TWO_PI_RECIP
+  dt = phase_inc
   if(t < dt):
     t /= dt
     return t + t - t * t - 1.0
@@ -16,7 +15,7 @@ def polyblep(phase_inc, t):
   else:
     return 0.0
 
-def calc_phase_inc(f): return (TWOPI_F * f) * sr_recip_
+def calc_phase_inc(f): return f * sr_recip_
 
 sr_        = 48000
 sr_recip_  = 1.0 / sr_
@@ -26,70 +25,74 @@ phase_ = 0
 
 
 def calculate_tri(pw_):
-    global phase_
+    global phase_, last_tri
+
     saw = 0;
     square = 0;
-    pw_scaled_0_2pi = pw_ * TWOPI_F
-    pw_scaled_m1_1 = pw_ * 2 - 1
-    phase_scaled_m1_1 = phase_ * TWO_PI_RECIP * 2 - 1
-    t = phase_scaled_m1_1 * 0.5 + 0.5
-    
-    pw_lt_half = pw_ < 0.5
-    phase_lt_half = phase_ < PI_F
 
-    if pw_lt_half:
-        if phase_ < pw_scaled_0_2pi:
-            square = (pw_scaled_m1_1 * 2 + 1)
-            saw = phase_scaled_m1_1
-        else:
-            square = -1
-            saw = -phase_scaled_m1_1
-        square += polyblep(phase_inc, t);
-        square -= polyblep(phase_inc, math.fmod(t + (1 - pw_), 1.0));
-        saw += polyblep(phase_inc, t);
-        saw -= polyblep(phase_inc, math.fmod(t + (1 - pw_), 1.0));
-    else:
-        if phase_lt_half:
-            square = 1
-            saw = phase_scaled_m1_1
-        else:
-            square = -1
-            saw = -phase_scaled_m1_1
-        square += polyblep(phase_inc, t);
-        square -= polyblep(phase_inc, math.fmod(t + 0.5, 1.0));
-        saw += polyblep(phase_inc, t);
-        saw -= polyblep(phase_inc, math.fmod(t + 0.5, 1.0));
-        saw *= 2 - 2 * pw_
+    saw = (2.0 * phase_) - 1.0
+    square = 1 if phase_ < pw_ else -1.0
+    tri = 1 if phase_ < 0.5 else -1.0
+
+    half_cycle_blep = polyblep(phase_inc, phase_)
+    saw -= half_cycle_blep
+    square += half_cycle_blep
+    tri += half_cycle_blep
+    square -= polyblep(phase_inc, math.fmod(phase_ + (1.0 - pw_), 1.0))
+    tri -= polyblep(phase_inc, math.fmod(phase_ + 0.5, 1.0))
+
+    saw *= -1.0;
+    square *= -0.707
+    tri  = phase_inc * tri + (1.0 - phase_inc) * last_tri
+    last_tri = tri;
+    tri *= -4.0
+
+    fade_in = math.fmod(pw_, one_third) * 3
+    fade_out = 1 - fade_in
+    fast_fade = max(fade_out - fade_in, 0)
+    if 0 <= pw_ < one_third:
+       tri *= fade_in
+       square *= fade_in
+    if one_third <= pw_ < two_thirds:
+       saw *= fade_out
+       tri *= fast_fade
+    if two_thirds <= pw_ < 1:
+       tri = 0
+       saw = 0
+       
         
     phase_ += phase_inc;
-    if phase_ > TWOPI_F:
-        phase_ -= TWOPI_F
+    if phase_ > 1.0:
+        phase_ -= 1.0
 
-    return saw, square, (saw + square) * 0.45
+    return saw, square, tri
 
 
 
 
 def print_plot():
-    pw = 0.25
-    n_cycles = 5
+    pw = 0.2
+    n_cycles = 30
     sweep_pw = False
-    plot_spread = 0
-    # sweep_pw = True
+    plot_spread = 2
+    sweep_pw = True
 
     _n_samples = 48000 // (100 // n_cycles)
     _saw_samples = []
     _square_samples = []
+    _tri_samples = []
     _osc_samples = []
     for i in range(_n_samples):
         if sweep_pw:
             pw = i / _n_samples
-        saw, square, osc = calculate_tri(pw)
+        saw, square, tri = calculate_tri(pw)
         _saw_samples.append(saw - plot_spread)
         _square_samples.append(square + plot_spread)
-        _osc_samples.append(osc)
+        _tri_samples.append(tri + 2 * plot_spread)
+        _osc_samples.append((saw + square + tri) / 2)
     plt.plot(_saw_samples)
     plt.plot(_square_samples)
+    plt.plot(_tri_samples)
     plt.plot(_osc_samples)
     plt.show()
     
