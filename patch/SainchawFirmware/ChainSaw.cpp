@@ -20,6 +20,7 @@ const int      kNumStereoChannels              = 2;
 const int      kNumControlSteps                = 7;
 const int      kConfigSlot                     = 0;
 const uint16_t kSettingsSaveInterval           = 24000;
+const int kCalSteps           = 6;
 
 
 void UpdateControls();
@@ -27,9 +28,11 @@ void handleCalibration();
 bool cal_handleEncoder();
 void cal_read_voct();
 void save_config();
+void save_settings();
 void load_config();
+void load_settings();
 
-#define STORE_SETTINGS
+// #define STORE_SETTINGS
 
 // #define LOAD_METER
 #ifdef LOAD_METER
@@ -56,7 +59,9 @@ int              waitcount_;
 size_t           control_step_;
 bool             cpu_meter_one;
 bool             cpu_meter_two;
+bool             docal;
 Pitch            pitch[kNumVoices];
+volatile float   prevent_optimization;
 
 void blockStart() {
 #ifdef LOAD_METER
@@ -174,6 +179,7 @@ int main(void) {
   waitcount_            = 0;
   waitcount_            = 0;
   save_settings_counter = 0;
+  docal                 = false;
 
   voct_patched_[0] = true;
   voct_patched_[1] = false;
@@ -190,6 +196,15 @@ int main(void) {
 
 void handleEncoder() {
   bool pushed = false;
+  if(sainchaw.encoder.TimeHeldMs() >= 5000) {
+    sainchaw.SetNoteLed(true);
+    sainchaw.SetAltLed(true);
+    if(sainchaw.encoder.Increment()) {
+      docal = true;
+      return;
+    }
+    return;
+  }
   if(sainchaw.encoder.TimeHeldMs() >= 1000) {
     settings.cents             = 0;
     settings.semitones         = 0;
@@ -197,6 +212,10 @@ void handleEncoder() {
     return;
   }
   if(sainchaw.encoder.FallingEdge()) {
+    if(docal) {
+      docal = false;
+      handleCalibration();
+    }
     if(ignore_enc_switch_) {
       ignore_enc_switch_ = false;
       return;
@@ -247,6 +266,9 @@ float getCalibratedVoltage(int voice_n) {
     return (current_config.voct_2_offset + (current_config.voct_2_scale * raw_value));
   case 2:
     return (current_config.voct_3_offset + (current_config.voct_3_scale * raw_value));
+  default:
+    return raw_value * 5.f + 2.f;
+    break;
   }
 }
 
@@ -338,15 +360,8 @@ void UpdateControls() {
  *
  */
 
-
-bool cal_handleEncoder() {
-  sainchaw.ProcessDigitalControls();
-  return sainchaw.encoder.FallingEdge();
-}
-
-void cal_read_voct(int input, bool onevolt) {
+float cal_read_voct(int input, bool onevolt) {
   Sainchaw::Ctrl i = (Sainchaw::Ctrl)(Sainchaw::PITCH_1_CTRL + input);
-  sainchaw.controls[i].Process();
   float read_value = sainchaw.GetKnobValue(i);
   switch(input) {
     case 0:
@@ -370,8 +385,10 @@ void cal_read_voct(int input, bool onevolt) {
         cal_data_.voct_3_3v = read_value;
       }
       break;
-    default: return; break;
+    default:
+      break;
   }
+  return read_value;
 }
 
 float calculateScale(float val1V, float val3V) {
@@ -385,24 +402,25 @@ float calculateOffset(float val1V, float scale) {
 
 void handleCalibration() {
   sainchaw.StopAudio();
-  bool calibrating  = true;
-  int  complete     = 6;
-  bool waiting      = true;
-  int  current_step = 0;
+  sainchaw.ProcessDigitalControls();
+  volatile bool calibrating  = true;
+  volatile bool waiting      = true;
+  volatile int  current_step = 0;
 
   while(calibrating) {
+    
     sainchaw.SetNoteLed((current_step % 3) & 0b10);
     sainchaw.SetAltLed((current_step % 3) & 0b01);
-    if(waiting) {
-      waiting = !cal_handleEncoder();
-      continue;
+    while (waiting) {
+        sainchaw.ProcessDigitalControls();
+        sainchaw.ProcessAnalogControls();
+        waiting = !sainchaw.encoder.FallingEdge();
     }
-    int voct  = current_step % 3;
-    int volts = (int)(current_step + 1) / 2;
-    cal_read_voct(voct, volts);
+    prevent_optimization = cal_read_voct(current_step % 3, current_step >= 3);
     waiting = true;
     current_step++;
-    if(current_step == complete) { calibrating = false; }
+    calibrating = current_step >= kCalSteps;
+    prevent_optimization = 10.0f / current_step;
   }
 
   current_config.voct_1_scale = calculateScale(cal_data_.voct_1_1v, cal_data_.voct_1_3v);
@@ -415,6 +433,8 @@ void handleCalibration() {
   current_config.voct_3_offset = calculateOffset(cal_data_.voct_3_1v, current_config.voct_3_scale);
 
   save_config();
+  sainchaw.SetNoteLed(waiting);
+  sainchaw.SetAltLed(waiting);
   sainchaw.StartAudio(AudioCallback);
 }
 
@@ -429,16 +449,12 @@ void save_settings() {
   settings.tag = kConfigTag;
   uint32_t base = 0x90000000;
   base += 4096;
-  sainchaw.seed.qspi.Erase(base, base + sizeof(CONFIGURATION));
-  sainchaw.seed.qspi.Write(base, sizeof(CONFIGURATION), (uint8_t*)&settings);
+  sainchaw.seed.qspi.Erase(base, base + sizeof(SETTINGS));
+  sainchaw.seed.qspi.Write(base, sizeof(SETTINGS), (uint8_t*)&settings);
 }
 
 void load_config() {
-  try {
-    memcpy(&current_config,
-          reinterpret_cast<void*>(0x90000000),
-          sizeof(CONFIGURATION));
-  } catch (int _) {}
+  memcpy(&current_config, reinterpret_cast<void*>(0x90000000), sizeof(CONFIGURATION));
   if (current_config.tag != kConfigTag) {
     current_config.voct_1_scale = 5.f;
     current_config.voct_1_offset = 2.f;
@@ -450,11 +466,7 @@ void load_config() {
 }
   
   void load_settings() {
-    try {
-      memcpy(&settings,
-            reinterpret_cast<void*>(0x90000000 + 4096),
-            sizeof(SETTINGS));
-    } catch (int _) {}
+    memcpy(&settings, reinterpret_cast<void*>(0x90000000 + 4096), sizeof(SETTINGS));
     if (settings.tag != kConfigTag) {
       settings.swarmSize = 3;
       settings.activeVoices = 1;
