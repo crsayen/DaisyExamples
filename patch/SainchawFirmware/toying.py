@@ -4,8 +4,7 @@ one_third = 1 / 3
 two_thirds = 2 * one_third
 last_tri = 0;
 
-def polyblep(phase_inc, t):
-  dt = phase_inc
+def polyblep(dt, t):
   if(t < dt):
     t /= dt
     return t + t - t * t - 1.0

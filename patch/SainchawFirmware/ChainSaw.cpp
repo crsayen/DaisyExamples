@@ -3,35 +3,46 @@
 #include "Pitch.h"
 #include "daisy_sainchaw.h"
 #include "daisysp.h"
-// #include "configuration.h"
+#include "configuration.h"
 #include "Squaw.h"
 
 using namespace daisy;
 using namespace daisysp;
 
-const int   kMaxOscsPerVoice                = 13;
-const int   kMinOscsPerVoice                = 3;
+const uint32_t kConfigTag                   = 3141592653;
+const int   kMaxOscsPerVoice                = 7;
+const int   kMinOscsPerVoice                = 1;
 const float kDetuneScale                    = 0.15f;
 const float kFmHzPerVolt                    = 100.0f;
 const float kbrmalizationDetectionThreshold = -0.15f;
-const int   kNumVoices                      = 5;
+const int   kNumVoices                      = 3;
 const int   kNumStereoChannels              = 2;
+const int   kNumControlSteps                = 7;
+const int   kConfigSlot                     = 0;
 
 
-#define LOAD_METER
+void UpdateControls();
+void handleCalibration();
+bool cal_handleEncoder();
+void cal_read_voct();
+void save_config(uint32_t slot);
+void load_config(uint32_t slot);
+
+// #define LOAD_METER
 #ifdef LOAD_METER
 CpuLoadMeter cpuLoadMeter;
 #endif
 
-enum EncState { SEMITONES, CENTS, SWARM_SIZE, LAST };
+enum EncState { SEMITONES, CENTS, SWARM_SIZE, ACTIVE_VOICES, LAST };
 
 Sainchaw                sainchaw;
 Squaw                   swarms[kNumVoices][kMaxOscsPerVoice];
 
 
-
+CONFIGURATION current_config;
 int           encoderState_;
 int           swarmSize_;
+int           activeVoices_;
 float         amplitudeReduction_;
 int           swarmCenterShift_;
 int           semitones_;
@@ -40,11 +51,11 @@ float         lpfm_;
 bool          ignore_enc_switch_;
 bool          voct_patched_[kNumVoices];
 int           waitcount_;
+size_t        control_step_;
 bool          cpu_meter_one;
 bool          cpu_meter_two;
+bool          calibrated_;
 Pitch         pitch[kNumVoices];
-
-void UpdateControls();
 
 void blockStart() {
 #ifdef LOAD_METER
@@ -52,8 +63,8 @@ void blockStart() {
 #endif
 }
 
-void blockEnd() {
 #ifdef LOAD_METER
+void blockEnd() {
   cpuLoadMeter.OnBlockEnd();
   // float load = cpuLoadMeter.GetAvgCpuLoad();
   float load = cpuLoadMeter.GetMaxCpuLoad();
@@ -70,8 +81,8 @@ void blockEnd() {
     cpu_meter_one = false;
     cpu_meter_two = false;
   }
-#endif
 }
+#endif
 
 #ifdef LOAD_METER
 void displayLoadMeter() {
@@ -82,12 +93,14 @@ void displayLoadMeter() {
 
 static void
 AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, size_t size) {
+  #ifdef LOAD_METER
   blockStart();
+  #endif
+
   UpdateControls();
   for(size_t i = 0; i < size; i++) {
     float sigr = 0.f;
     float sigl = 0.f;
-    // float sigm = 0.f;
 
     for(size_t voice_n = 0; voice_n < kNumVoices; voice_n++) {
       if(voct_patched_[voice_n]) {
@@ -95,36 +108,24 @@ AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, size_t
           float sig = swarms[voice_n][j].Process();
           switch (j)
           {
-          case 0:
-            
-            sigl += sig;
-            sigr += sig;
-            break;
           case 1:
             sigl += sig;
-            // sigr += sig;
             break;
           case 2:
-            // sigl += sig;
             sigr += sig;
             break;
           case 5:
-            // sigl += sig;
             sigr += sig;
             break;
           case 6:
             sigl += sig;
-            // sigr += sig;
             break;
           case 9:
             sigl += sig;
-            // sigr += sig;
             break;
           case 10:
-            // sigl += sig;
             sigr += sig;
             break;
-          
           default:
             sigl += sig;
             sigr += sig;
@@ -133,18 +134,18 @@ AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, size_t
         }
       }
     }
-    // sig *= .3f * amplitudeReduction_;
-    // sig *= .3f * amplitudeReduction_;
-    // sig *= .3f * amplitudeReduction_;
-    // sigl += sigm;
-    // sigr += sigm;
+
     sigl *= 0.5f * amplitudeReduction_;
     sigr *= 0.5f * amplitudeReduction_;
 
     out[0][i] = sigl;
     out[1][i] = sigr;
   }
+
+
+  #ifdef LOAD_METER
   blockEnd();
+  #endif
 }
 
 void SetupOsc(float samplerate) {
@@ -157,29 +158,27 @@ void SetupOsc(float samplerate) {
 
 int main(void) {
   float samplerate;
-  sainchaw.Init(); // Initialize hardware
-  // sainchaw.SetAudioSampleRate()
+  sainchaw.Init();
   samplerate = sainchaw.AudioSampleRate();
+  
+  #ifdef LOAD_METER
+  cpuLoadMeter.Init(samplerate, sainchaw.AudioBlockSize());
+  #endif
 
   encoderState_       = EncState::SEMITONES;
   swarmSize_          = 3;
+  activeVoices_       = 0;
   swarmCenterShift_   = 2;
   amplitudeReduction_ = .12f / swarmSize_;
   semitones_          = -12;
   cents_              = 0;
   ignore_enc_switch_  = false;
   waitcount_          = 0;
+  waitcount_          = 0;
+  calibrated_         = false;
 
-#ifdef LOAD_METER
-  cpuLoadMeter.Init(samplerate, sainchaw.AudioBlockSize());
-#endif
+  load_config(0);
 
-  // for(int voice_n = 0; voice_n < kNumVoices; voice_n++) {
-  //   bool is voi
-  //   voct_patched_[voice_n] = ;
-  //   pitch[voice_n].SetByNote(0);
-  // }
-  // TODO: handle more than one voice
   voct_patched_[0] = true;
   voct_patched_[1] = false;
   voct_patched_[2] = false;
@@ -215,62 +214,101 @@ void handleEncoder() {
   int incr = sainchaw.encoder.Increment();
 
   if (incr != 0 || pushed) {
-
     switch(encoderState_) {
     case EncState::SEMITONES:
       semitones_ += incr;
       break;
     case EncState::CENTS:
-      semitones_ += incr;
+      cents_ += incr;
       break;
     case EncState::SWARM_SIZE:
       swarmSize_ = DSY_CLAMP(swarmSize_ + incr * 2, kMinOscsPerVoice, kMaxOscsPerVoice);
-      swarmCenterShift_ = floor(swarmCenterShift_ * .5f);
+      swarmCenterShift_ = floor(swarmSize_ * .5f);
+      break;
+    case EncState::ACTIVE_VOICES:
+      activeVoices_ = DSY_CLAMP(activeVoices_ + incr, 0, 3);
       break;
     }
 
-    bool note_led_state
-        = (encoderState_ == EncState::SEMITONES || encoderState_ == EncState::SWARM_SIZE);
-    bool alt_led_state
-        = (encoderState_ == EncState::CENTS || encoderState_ == EncState::SWARM_SIZE);
-#ifndef LOAD_METER
-    sainchaw.SetNoteLed(note_led_state);
-    sainchaw.SetAltLed(alt_led_state);
-#endif
+    for(int i = 0; i < kNumVoices; i++) { voct_patched_[i] = i < activeVoices_; }
+
+    #ifndef LOAD_METER
+    if (pushed) {
+      sainchaw.SetNoteLed(encoderState_ == EncState::SEMITONES || encoderState_ == EncState::SWARM_SIZE);
+      sainchaw.SetAltLed(encoderState_ == EncState::CENTS || encoderState_ == EncState::SWARM_SIZE);
+    }
+    #endif
   }
+}
+
+float getCalibratedVoltage(int voice_n) {
+  float raw_value = sainchaw.GetKnobValue((Sainchaw::Ctrl)(Sainchaw::PITCH_1_CTRL + voice_n));
+  if (!calibrated_) { return raw_value * 5.f + 2; }
+  switch (voice_n)
+  {
+  case 0:
+    return (current_config.voct_1_offset + (current_config.voct_1_scale * raw_value));
+  case 1:
+    return (current_config.voct_2_offset + (current_config.voct_2_scale * raw_value));
+  case 2:
+    return (current_config.voct_2_offset + (current_config.voct_2_scale * raw_value));
+  }
+}
+
+void doControlStep() {
+  sainchaw.ProcessDigitalControls();
+  switch (control_step_)
+  {
+  case 0:
+    sainchaw.ProcessAnalogControl(0);
+    break;
+  case 1:
+    sainchaw.ProcessAnalogControl(1);
+    break;
+  case 2:
+    sainchaw.ProcessAnalogControl(2);
+    break;
+  case 3:
+    sainchaw.ProcessAnalogControl(3);
+    break;
+  case 4:
+    sainchaw.ProcessAnalogControl(4);
+    break;
+  case 5:
+    sainchaw.ProcessAnalogControl(5);
+    break;
+  default:
+    break;
+  }
+
+  control_step_++;
+  if (control_step_ >= kNumControlSteps) { control_step_ = 0; }
 }
 
 void UpdateControls() {
 #ifdef LOAD_METER
   displayLoadMeter();
 #endif
-  sainchaw.ProcessDigitalControls();
+  
+  // doControlStep();
   sainchaw.ProcessAnalogControls();
+  sainchaw.ProcessDigitalControls();
 
-  float shape_amt = DSY_CLAMP(
-      ((sainchaw.GetKnobValue(Sainchaw::SHAPE_CTRL))), .0f, 1.f); // 0.0 to 1.0
 
-  float detune_amt
-      = DSY_CLAMP(((sainchaw.GetKnobValue(Sainchaw::DETUNE_CTRL))), .0f, 1.f)
-        * kDetuneScale;
+  float shape_amt = DSY_CLAMP(((sainchaw.GetKnobValue(Sainchaw::SHAPE_CTRL))), .0f, 1.f);
+  float detune_amt = DSY_CLAMP(((sainchaw.GetKnobValue(Sainchaw::DETUNE_CTRL))), .0f, 1.f) * kDetuneScale;
 
   // float fm_val = sainchaw.GetKnobValue(Sainchaw::FM_CTRL) * 8.f; //voltage
   // fonepole(lpfm_, fm_val, .001f);
   // ctrl[Sainchaw::FM_CTRL] = lpfm_;
-
   // float fm = ctrl[Sainchaw::FM_CTRL] * kFmHzPerVolt;
 
-  // encoder
   handleEncoder();
 
-  // Adjust oscillators based on inputs
   for(int voice_n = 0; voice_n < kNumVoices; voice_n++) {
-    if(!voct_patched_[voice_n]) {
-      continue;
-    }
+    if(!voct_patched_[voice_n]) { continue; }
 
-    float voltage
-        = sainchaw.GetKnobValue((Sainchaw::Ctrl)(Sainchaw::PITCH_1_CTRL + voice_n)) * 5.f + 2;
+    float voltage = getCalibratedVoltage(voice_n);
 
     for(int osc = 0; osc < swarmSize_; osc++) {
       pitch[voice_n].SetByVoltage(voltage);
@@ -280,4 +318,117 @@ void UpdateControls() {
       swarms[voice_n][osc].SetShape(shape_amt);
     }
   }
+}
+
+/*
+ *
+ *
+ *
+ **     2222222222      222222        2222
+ **   22222222222     2222  2222      2222
+ **  2222            2222     2222    2222
+ **  2222           222222222222222   2222
+ **  2222           2222       2222   2222
+ **   22222222222   2222       2222   222222222222222
+ *      2222222222  2222       2222   22222222222222
+ *
+ *
+ */
+
+
+bool cal_handleEncoder() {
+  sainchaw.ProcessDigitalControls();
+  return sainchaw.encoder.FallingEdge();
+}
+
+void cal_read_voct(int input, bool onevolt) {
+  Sainchaw::Ctrl i = (Sainchaw::Ctrl)(Sainchaw::PITCH_1_CTRL + input);
+  sainchaw.controls[i].Process();
+  float read_value = sainchaw.GetKnobValue(i);
+  switch(input) {
+    case 0:
+      if(onevolt) {
+        current_config.voct_1_1v = read_value;
+      } else {
+        current_config.voct_1_3v = read_value;
+      }
+      break;
+    case 1:
+      if(onevolt) {
+        current_config.voct_2_1v = read_value;
+      } else {
+        current_config.voct_2_3v = read_value;
+      }
+      break;
+    case 2:
+      if(onevolt) {
+        current_config.voct_3_1v = read_value;
+      } else {
+        current_config.voct_3_3v = read_value;
+      }
+      break;
+    default: return; break;
+  }
+}
+
+float calculateScale(float val1V, float val3V) {
+  float delta = val3V - val1V;
+  return 24.f / delta;
+}
+
+float calculateOffset(float val1V, float scale) {
+  return 12.f - scale * val1V;
+}
+
+void handleCalibration() {
+  sainchaw.StopAudio();
+  bool calibrating  = true;
+  int  complete     = 6;
+  bool waiting      = true;
+  int  current_step = 0;
+
+  while(calibrating) {
+    sainchaw.SetNoteLed((current_step % 3) & 0b10);
+    sainchaw.SetAltLed((current_step % 3) & 0b01);
+    if(waiting) {
+      waiting = !cal_handleEncoder();
+      continue;
+    }
+    int voct  = current_step % 3;
+    int volts = (int)(current_step + 1) / 2;
+    cal_read_voct(voct, volts);
+    waiting = true;
+    current_step++;
+    if(current_step == complete) { calibrating = false; }
+  }
+
+  current_config.voct_1_scale = calculateScale(current_config.voct_1_1v, current_config.voct_1_3v);
+  current_config.voct_1_offset = calculateOffset(current_config.voct_1_1v, current_config.voct_1_scale);
+
+  current_config.voct_2_scale = calculateScale(current_config.voct_2_1v, current_config.voct_2_3v);
+  current_config.voct_2_offset = calculateOffset(current_config.voct_2_1v, current_config.voct_2_scale);
+
+  current_config.voct_3_scale = calculateScale(current_config.voct_3_1v, current_config.voct_3_3v);
+  current_config.voct_3_offset = calculateOffset(current_config.voct_3_1v, current_config.voct_3_scale);
+
+  save_config(0);
+  sainchaw.StartAudio(AudioCallback);
+}
+
+
+void save_config(uint32_t slot) {
+  current_config.tag = kConfigTag;
+  uint32_t base = 0x90000000;
+  base += slot * 4096;
+  sainchaw.seed.qspi.Erase(base, base + sizeof(CONFIGURATION));
+  sainchaw.seed.qspi.Write(base, sizeof(CONFIGURATION), (uint8_t*)&current_config);
+}
+
+void load_config(uint32_t slot) {
+  try {
+    memcpy(&current_config,
+          reinterpret_cast<void*>(0x90000000 + (slot * 4096)),
+          sizeof(CONFIGURATION));
+  } catch (int _) {}
+  calibrated_ = current_config.tag == kConfigTag;
 }
